@@ -59,8 +59,8 @@
 # The pre-processor and compiler options.
 MY_CFLAGS =
 
-# The linker options.
-MY_LIBS   =
+# The external libraries to link in.
+EXT_LIBS   =
 
 # The pre-processor options used by the cpp (man cpp for more).
 CPPFLAGS  = -Wall
@@ -68,19 +68,27 @@ CPPFLAGS  = -Wall
 # The options used in linking as well as in any direct use of ld.
 LDFLAGS   =
 
-# The directories in which source files reside.
-# If not specified, only the current directory will be serached.
-SRCDIRS   = src lib/mylib/src
+# Use the source from the expansion of 
+# $(SRC_FOLDERS)/inc and 
+#  $(SRC_FOLDERS)/src or... 
+# SRC_FOLDERS = . lib/mylib
 
-#
-# Folder to be include for header files
-INCDIRS = inc lib/mylib/inc
+# ... use source from
+SRCDIRS = src  
+SRCDIRS += lib/src
+
+# .. and headers from 
+INCDIRS = inc 
+INCDIRS += lib/inc 
+
+# Folder keeping the linker file
+LD_DIR   = ldscript
+
+# Linker scripts
+LD_FILE  = linker.ld
 
 # Where the stuff should be build
 BUILDDIR = build
-
-# Linker flags
-LDFLAGS = 
 
 # Where the final product(s) shall be put
 BINARY = binary
@@ -94,7 +102,7 @@ PROGRAM   = firmware
 
 # The source file types (headers excluded).
 # .c indicates C source files, and others C++ ones.
-SRCEXTS = .c .C .cc .cpp .CPP .c++ .cxx .cp
+SRCEXTS = .c .C .cc .cpp .CPP .c++ .cxx .cp .s
 
 # The header file types.
 HDREXTS = .h .H .hh .hpp .HPP .h++ .hxx .hp
@@ -104,11 +112,14 @@ OPTIMIZE=-O0
 
 # The pre-processor and compiler options.
 # Users can override those variables from the command line.
-CFLAGS  = -std=c99 -g $(OPTIMIZE)
-CXXFLAGS=  -std=c++11 -g $(OPTIMIZE)
+CFLAGS  = -g
+CDIALECT=  -std=c99
+
+CXXFLAGS  =  -g
+CXXDIALECT=  -std=c++11
 
 # Uncomment for cross compile
-XCOMPILE = arm-none-eabi-
+CROSS_COMPILE = arm-none-eabi-
 
 # The C program compiler.
 CC     = gcc
@@ -116,8 +127,20 @@ CC     = gcc
 # The C++ program compiler.
 CXX    = g++
 
-# Dum information of the binary-functions
+# Generate libraries
+ARCHIVE = ar
+
+# Dump information of the binary-functions
 SIZE = size
+
+# Copy elf to other output format
+CP = objcopy
+
+# Copy elf to other output format
+LD = ld
+
+# Strip binaries
+STRP = strip
 
 # The command used to delete file
 RM     = rm -f
@@ -125,94 +148,69 @@ RM     = rm -f
 # The command used to delete folders.
 RMDIR  = rm -rf
 
-ETAGS = etags
-ETAGSFLAGS =
 
-CTAGS = ctags
-CTAGSFLAGS =
-
+ifneq ($(CROSS_COMPILE),) 
 #
 # Crosscompiler setting for cortex-M
 # With hard floating point core
-CFLAGS_CORTEX_M = -mthumb -mabi=aapcs-linux -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fsingle-precision-constant -Wdouble-promotion
+CFLAGS_CORTEX_M = -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -fsingle-precision-constant -Wdouble-promotion
 CFLAGS_MCU_f4 = $(CFLAGS_CORTEX_M) -mtune=cortex-m4 -mcpu=cortex-m4 -DMCU_SERIES_F4
 CFLAGS_MCU_f7 = $(CFLAGS_CORTEX_M) -mtune=cortex-m7 -mcpu=cortex-m7 -DMCU_SERIES_F7
 CFLAGS_MCU_l4 = $(CFLAGS_CORTEX_M) -mtune=cortex-m4 -mcpu=cortex-m4 -DMCU_SERIES_L4
+CXXFLAGS +=  -fno-exceptions -fno-rtti
 
+DEVICE = -DSTM32F407xx
+
+CPPFLAGS += $(CFLAGS_MCU_f4) 
+CPPFLAGS += $(DEVICE) 
+CPPFLAGS += -DUSE_HAL_DRIVER
+
+CFLAGS += -fdata-sections -ffunction-sections
+
+# Linker flags
+LDFLAGS += -static
+LDFLAGS += --verbose
+LDFLAGS += -Wl,-gc-sections 
+LDFLAGS += -L $(LD_DIR) -T $(LD_FILE)
+LDFLAGS += -Wl,-Map=$(BINARY)/$(@:.elf=.map),-cref
+LDFLAGS += --specs=nano.specs
+
+endif
 
 ## Stable Section: usually no need to be changed. But you can add more.
 ##==========================================================================
-SHELL   = /bin/sh
-EMPTY   =
-SPACE   = $(EMPTY) $(EMPTY)
-ifeq ($(PROGRAM),)
-  CUR_PATH_NAMES = $(subst /,$(SPACE),$(subst $(SPACE),_,$(CURDIR)))
-  PROGRAM = $(word $(words $(CUR_PATH_NAMES)),$(CUR_PATH_NAMES))
-  ifeq ($(PROGRAM),)
-    PROGRAM = a.out
-  endif
-endif
-ifeq ($(SRCDIRS),)
-  SRCDIRS = .
+SHELL   = /bin/bash
+
+ifneq ($(SRC_FOLDERS),)
+	# Use canonical structure
+	SRCDIRS =$(foreach d,$(SRC_FOLDERS), $(d)/src)
+	INCDIRS =$(foreach d,$(SRC_FOLDERS), $(d)/inc)
 endif
 SOURCES = $(foreach d,$(SRCDIRS),$(wildcard $(addprefix $(d)/*,$(SRCEXTS))))
 HEADERS = $(foreach d,$(SRCDIRS),$(wildcard $(addprefix $(d)/*,$(HDREXTS))))
 INCDIRSFLAG = $(foreach d,$(INCDIRS), -I$(d))
 SRC_CXX = $(filter-out %.c,$(SOURCES))
-OBJS    = $(BUILDDIR)/$(addsuffix .o, $(basename $(SOURCES)))
+OBJS    = $(foreach f,$(addsuffix .o, $(basename $(SOURCES))), $(BUILDDIR)/$(f))
 OBJDIRS = $(foreach d,$(SRCDIRS), $(BUILDDIR)/$(d))
-DEPS    = $(OBJS:.o=.d)
+INT_LIBS = 
 
 ## Define some useful variables.
-DEP_OPT = $(shell if `$(CC) --version | grep "GCC" >/dev/null`; then \
-                  echo "-MM -MP"; else echo "-M"; fi )
-DEPEND      = $(XCOMPILE)$(CC)  $(DEP_OPT)  $(MY_CFLAGS) $(CFLAGS) $(CPPFLAGS)
-DEPEND.d    = $(subst -g ,,$(DEPEND))
-COMPILE.c   = $(XCOMPILE)$(CC)  $(MY_CFLAGS) $(CFLAGS)   $(CPPFLAGS) $(INCDIRSFLAG) -c
-COMPILE.cxx = $(XCOMPILE)$(CXX) $(MY_CFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(INCDIRSFLAG) -c
-LINK.c      = $(XCOMPILE)$(CC)  $(MY_CFLAGS) $(CFLAGS)   $(CPPFLAGS) $(LDFLAGS)
-LINK.cxx    = $(XCOMPILE)$(CXX) $(MY_CFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(LDFLAGS)
+AR          = $(CROSS_COMPILE)$(ARCHIVE)
+ASSEMBLER   = $(CROSS_COMPILE)$(AS) $(CFLAGS)
+COMPILE.c   = $(CROSS_COMPILE)$(CC)  $(MY_CFLAGS) $(CFLAGS)   $(OPTIMIZE) $(CDIALECT)   $(CPPFLAGS) $(INCDIRSFLAG) -c
+COMPILE.cxx = $(CROSS_COMPILE)$(CXX) $(MY_CFLAGS) $(CXXFLAGS) $(OPTIMIZE) $(CXXDIALECT) $(CPPFLAGS) $(INCDIRSFLAG) -c
+LINK.c      = $(CROSS_COMPILE)$(CC)  $(MY_CFLAGS) $(CFLAGS)   $(OPTIMIZE) $(CDIALECT)   $(CPPFLAGS) $(LDFLAGS)
+LINK.cxx    = $(CROSS_COMPILE)$(CXX) $(MY_CFLAGS) $(CXXFLAGS) $(OPTIMIZE) $(CXXDIALECT) $(CPPFLAGS) $(LDFLAGS)
+COPY        = $(CROSS_COMPILE)$(CP) 
+LINK        = $(CROSS_COMPILE)$(LD)
+STRIP       = $(CROSS_COMPILE)$(STRP)
 
-.PHONY: all objs tags ctags clean distclean help show
+.PHONY: all objs  clean distclean help show bdir
 
 # Delete the default suffixes
 .SUFFIXES:
 
-all: bdir $(PROGRAM)
-
-# Rules for creating dependency files (.d).
-#------------------------------------------
-$(BUILDDIR)/%.d:%.c
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
-
-$(BUILDDIR)/%.d:%.C
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
-
-$(BUILDDIR)/%.d:%.cc
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
-
-$(BUILDDIR)/%.d:%.cpp
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
-
-$(BUILDDIR)/%.d:%.CPP
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
-
-$(BUILDDIR)/%.d:%.c++
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
-
-$(BUILDDIR)/%.d:%.cp
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
-
-$(BUILDDIR)/%.d:%.cxx
-	@echo -n $(dir $<) > $@
-	@$(DEPEND.d) $< >> $@
+all: bdir $(PROGRAM).bin  $(PROGRAM).hex
 
 # Rules for generating object files (.o).
 #----------------------------------------
@@ -242,15 +240,10 @@ $(BUILDDIR)/%.o:%.cp
 $(BUILDDIR)/%.o:%.cxx
 	$(COMPILE.cxx) $< -o $@
 
-# Rules for generating the tags.
-#-------------------------------------
-tags: $(HEADERS) $(SOURCES)
-	$(ETAGS) $(ETAGSFLAGS) $(HEADERS) $(SOURCES)
+$(BUILDDIR)/%.o:%.s
+	$(COMPILE.c) $< -o $@
 
-ctags: $(HEADERS) $(SOURCES)
-	$(CTAGS) $(CTAGSFLAGS) $(HEADERS) $(SOURCES)
-
-#Rules for generating the build directory
+# Rules for generating the build directory
 #-------------------------------------
 bdir:
 	@mkdir -p $(OBJDIRS) $(BINARY)
@@ -258,14 +251,17 @@ bdir:
 	
 # Rules for generating the executable.
 #-------------------------------------
-$(PROGRAM):$(OBJS)
-ifeq ($(SRC_CXX),)              # C program
-	$(LINK.c)   $(OBJS) $(MY_LIBS) -o $(BINARY)/$@
+$(PROGRAM).elf:$(OBJS)
+	# $(LINK) $(LDFLAGS) $(OBJS) -o $(BINARY)/$@ $(INT_LIBS) $(EXT_LIBS)
+	$(LINK.c) $(OBJS) -o $(BINARY)/$@ $(INT_LIBS) $(EXT_LIBS)
 	$(SIZE) $(BINARY)/$@
-else                            # C++ program
-	$(LINK.cxx) $(OBJS) $(MY_LIBS) -o $(BINARY)/$@
-	$(SIZE) $(BINARY)/$@
-endif
+
+$(PROGRAM).bin:$(PROGRAM).elf
+	$(COPY) -O binary $(BINARY)/$< $(BINARY)/$@
+
+$(PROGRAM).hex:$(PROGRAM).elf
+	$(COPY) -O ihex $(BINARY)/$< $(BINARY)/$@
+
 
 ifndef NODEP
 ifneq ($(DEPS),)
@@ -308,8 +304,6 @@ show:
 	@echo 'SOURCES     :' $(SOURCES)
 	@echo 'SRC_CXX     :' $(SRC_CXX)
 	@echo 'OBJS        :' $(OBJS)
-	@echo 'DEPS        :' $(DEPS)
-	@echo 'DEPEND      :' $(DEPEND)
 	@echo 'COMPILE.c   :' $(COMPILE.c)
 	@echo 'COMPILE.cxx :' $(COMPILE.cxx)
 	@echo 'link.c      :' $(LINK.c)
