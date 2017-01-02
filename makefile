@@ -173,7 +173,7 @@ LDFLAGS += --verbose
 LDFLAGS += -Wl,-gc-sections 
 LDFLAGS += -L $(LD_DIR) -T $(LD_FILE)
 LDFLAGS += -Wl,-Map=$(BINARY)/$(@:.elf=.map),-cref
-LDFLAGS += --specs=nano.specs
+#LDFLAGS += --specs=nano.specs
 
 endif
 
@@ -262,18 +262,8 @@ $(PROGRAM).bin:$(PROGRAM).elf
 $(PROGRAM).hex:$(PROGRAM).elf
 	$(COPY) -O ihex $(BINARY)/$< $(BINARY)/$@
 
-
-ifndef NODEP
-ifneq ($(DEPS),)
-  sinclude $(DEPS)
-endif
-endif
-
 clean:
 	$(RMDIR) $(BUILDDIR) $(BINARY)
-
-distclean: clean
-	$(RM) $(DEPS) TAGS
 
 # Show help.
 help:
@@ -283,10 +273,7 @@ help:
 	@echo 'Usage: make [TARGET]'
 	@echo 'TARGETS:'
 	@echo '  all       (=make) compile and link.'
-	@echo '  NODEP=yes make without generating dependencies.'
 	@echo '  objs      compile only (no linking).'
-	@echo '  tags      create tags for Emacs editor.'
-	@echo '  ctags     create ctags for VI editor.'
 	@echo '  clean     clean objects and the executable file.'
 	@echo '  distclean clean objects, the executable and dependencies.'
 	@echo '  show      show variables (for debug use only).'
