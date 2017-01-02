@@ -45,8 +45,6 @@
 #   $ make           compile and link
 #   $ make NODEP=yes compile and link without generating dependencies
 #   $ make objs      compile only (no linking)
-#   $ make tags      create tags for Emacs editor
-#   $ make ctags     create ctags for VI editor
 #   $ make clean     clean objects and the executable file
 #   $ make distclean clean objects, the executable and dependencies
 #   $ make help      get the usage of the makefile
@@ -70,31 +68,29 @@ LDFLAGS   =
 
 # Use the source from the expansion of 
 # $(SRC_FOLDERS)/inc and 
-#  $(SRC_FOLDERS)/src or... 
+#  $(SRC_FOLDERS)/src ... 
 # SRC_FOLDERS = . lib/mylib
 
-# ... use source from
+# ... or use source from
 SRCDIRS = src  
 SRCDIRS += lib/src
-
 # .. and headers from 
 INCDIRS = inc 
 INCDIRS += lib/inc 
 
-# Folder keeping the linker file
+# Folder keeping the linker script
 LD_DIR   = ldscript
 
 # Linker scripts
 LD_FILE  = linker.ld
 
-# Where the stuff should be build
+# Where the intermediate build products should be build
 BUILDDIR = build
 
 # Where the final product(s) shall be put
 BINARY = binary
 
 # The executable file name.
-# If not specified, current directory name or `a.out' will be used.
 PROGRAM   = firmware
 
 ## Implicit Section: change the following only when necessary.
